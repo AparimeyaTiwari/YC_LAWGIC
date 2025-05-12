@@ -560,6 +560,10 @@ async def handle_message(message: cl.Message):
     
     # Get current chat history
     chat_history: List[Dict[str, Any]] = cl.user_session.get("chat_history", [])
+
+    # Keep only last 20 messages to prevent unlimited growth
+    MAX_HISTORY = 20
+    chat_history = chat_history[-MAX_HISTORY:]
     
     # Add user message to history
     chat_history.append({
