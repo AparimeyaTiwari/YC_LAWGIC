@@ -73,58 +73,41 @@ chat_client = AzureOpenAI(
     azure_endpoint=endpoint
 )
 
-speech_key = os.getenv("SPEECH_KEY")
-speech_region = os.getenv("SPEECH_REGION")
-
-if not speech_key or not speech_region:
-    print("Warning: Missing Azure Speech credentials - voice features disabled")
+# Simplified language options - only English and Hindi
+language_options = {
+    "english": "en-IN",
+    "hindi": "hi-IN"
+}
 
 # Mapping from language code to Azure voice names
 language_to_voice = {
     'en': 'en-IN-NeerjaNeural',
-    'hi': 'hi-IN-SwaraNeural',
-    'bn': 'bn-IN-TanishaaNeural',
-    'gu': 'gu-IN-DhwaniNeural',
-    'kn': 'kn-IN-SapnaNeural',
-    'ml': 'ml-IN-SobhanaNeural',
-    'mr': 'mr-IN-AarohiNeural',
-    'pa': 'pa-IN-GaganNeural',
-    'ta': 'ta-IN-PallaviNeural',
-    'te': 'te-IN-MohanNeural',
-    'ur': 'ur-IN-SalmanNeural',
+    'hi': 'hi-IN-SwaraNeural'
 }
 
-def get_speech_config():
-    return speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+def get_speech_config(language_code="en-IN"):
+    """Get Azure Speech SDK configuration"""
+    speech_key = os.getenv("SPEECH_KEY")
+    speech_region = os.getenv("SPEECH_REGION")
+    if not speech_key or not speech_region:
+        raise RuntimeError("Azure credentials missing")
+    config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+    config.speech_recognition_language = language_code
+    return config
 
-async def recognize_speech():
-    """Recognize speech from microphone with automatic language detection"""
-    # Specify the languages you want to support for auto-detection
-    supported_languages = ["en-US", "hi-IN", "bn-IN", "gu-IN", "kn-IN", "ml-IN", 
-                          "mr-IN", "pa-IN", "ta-IN", "te-IN", "ur-IN"]
-    
-    auto_detect_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-        languages=supported_languages
-    )
-    
-    speech_config = get_speech_config()
+async def recognize_speech(language_locale="en-IN"):
+    """Recognize speech from microphone with specified language"""
+    speech_config = get_speech_config(language_locale)
     audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
-    
-    recognizer = speechsdk.SpeechRecognizer(
-        speech_config=speech_config, 
-        auto_detect_source_language_config=auto_detect_config,
-        audio_config=audio_config
-    )
-    
+    recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+
     try:
         loop = asyncio.get_running_loop()
         future = recognizer.recognize_once_async()
         result = await loop.run_in_executor(None, future.get)
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            lang_result = speechsdk.AutoDetectSourceLanguageResult(result)
-            detected_language = lang_result.language
-            return result.text.strip(), detected_language
+            return result.text.strip(), language_locale[:2]  # Return text and language code
         elif result.reason == speechsdk.ResultReason.NoMatch:
             raise ValueError("No speech detected")
         else:
@@ -159,26 +142,18 @@ async def synthesize_speech(text: str, language_code: str = None):
         raise RuntimeError(f"TTS error: {str(e)}")
 
 async def embedder(text: str):
-    # data = {
-    #     "input": [text]
-    # }
-    # response = requests.post(
-    #     EMBEDDINGEP,
-    #     headers=headers,
-    #     json=data
-    # )
     data = {
         "input": [text]
     }
     headers = {
         "Content-Type": "application/json",
-        "api-key": empkey  # or "Authorization" depending on your API
+        "api-key": empkey
     }
 
     response = requests.post(EMBEDDINGEP, headers=headers, json=data)
     
     try:
-        response.raise_for_status()  # Raise HTTPError if status != 200
+        response.raise_for_status()
         resp_json = response.json()
         
         if "data" not in resp_json:
@@ -187,7 +162,6 @@ async def embedder(text: str):
     except:
         print(f"Error in embedding request: {response.status_code} - {response.text}")
         return None
-
     
 def chunker(ip, chunk_size=10000):
     return [ip[i:i + chunk_size] for i in range(0, len(ip), chunk_size)]
@@ -221,28 +195,7 @@ gmaps = None
 # initialize translator key and endpoint
 language_map = {
     'hi': 'Hindi',
-    'mr': 'Marathi',
-    'gu': 'Gujarati',
-    'kn': 'Kannada',
-    'ta': 'Tamil',
-    'te': 'Telugu',
-    'en': 'English',
-    'bn': 'Bengali',
-    'pa': 'Punjabi',
-    'ml': 'Malayalam',
-    'or': 'Odia',
-    'as': 'Assamese',
-    'ur': 'Urdu',
-    'kok': 'Konkani',
-    'mai': 'Maithili',
-    'ks': 'Kashmiri',
-    'ne': 'Nepali',
-    'sd': 'Sindhi',
-    'sa': 'Sanskrit',
-    'bho': 'Bhojpuri',
-    'dog': 'Dogri',
-    'mni': 'Manipuri',
-    'sat': 'Santali',
+    'en': 'English'
 }
 
 key = os.getenv("TRANSLATOR_KEY")
@@ -261,6 +214,7 @@ ocr_endpoint = os.getenv("VISION_ENDPOINT")
 
 # Authenticate
 computervision_client = ComputerVisionClient(ocr_endpoint, CognitiveServicesCredentials(subscription_key))
+
 async def ocr(file_path: str) -> str:
     """
     Performs OCR on the given file using Azure Computer Vision and returns extracted text.
@@ -381,27 +335,6 @@ async def translate_back_to_original(english_text, original_lang_code):
     # print("🔁 Back-Translated to Original:", back_translated_text)
     return str(back_translated_text)
 
-@cl.action_callback("voice_input")
-async def on_voice_input(action: cl.Action):
-    """Handle voice input from action button"""
-    try:
-        listening_msg = await cl.Message(content="🎤 Listening... (Speak now)").send()
-        transcript, detected_lang = await recognize_speech()
-        await listening_msg.remove()
-        
-        # Store detected language in session
-        cl.user_session.set("detected_lang", detected_lang)
-        
-        # Create a message with the transcript and options
-        msg = cl.Message(content=f"🎤 You said: {transcript}")
-        await msg.send()
-        
-        # Continue with normal message processing
-        await handle_message(msg)
-        
-    except Exception as e:
-        await cl.Message(content=f"❌ Voice input error: {str(e)}").send()
-
 @cl.on_chat_start
 async def initialize_chat():
     """Initializes the chat session with all agents"""
@@ -431,17 +364,66 @@ async def initialize_chat():
     # Initialize Google Maps client
     gmaps = googlemaps.Client(key=os.getenv("GOOGLE_MAPS_API_KEY"))
 
-    # Add voice input option
+    # Add voice input options (only English and Hindi)
     actions = [
         cl.Action(
-            name="voice_input",
-            value="voice",
-            label="🎤 Voice Input",
-            description="Speak your question",
-            payload={"type": "voice"}
+            name="english_voice",
+            value="en-IN",
+            label="🗣️ English Voice",
+            description="Speak in English",
+            payload={"type": "voice", "language": "en-IN"}
+        ),
+        cl.Action(
+            name="hindi_voice",
+            value="hi-IN",
+            label="🗣️ Hindi Voice (हिंदी)",
+            description="हिंदी में बोलें",
+            payload={"type": "voice", "language": "hi-IN"}
+        ),
+        cl.Action(
+            name="text_input",
+            value="text",
+            label="✏️ Text Input",
+            description="Type your message",
+            payload={"type": "text"}
         )
     ]
     await cl.Message(content="How would you like to provide input?", actions=actions).send()
+
+async def handle_voice_input(language_locale: str):
+    """Common handler for voice input in any language"""
+    try:
+        listening_msg = await cl.Message(content=f"🎤 Listening in {language_locale[:2].upper()}... (Speak now)").send()
+        transcript, detected_lang = await recognize_speech(language_locale)
+        await listening_msg.remove()
+        
+        # Store detected language in session
+        cl.user_session.set("detected_lang", detected_lang)
+        
+        # Create a message with the transcript and process it
+        msg = cl.Message(content=transcript)
+        await msg.send()
+        
+        # Process the message through the normal flow
+        await handle_message(msg)
+        
+    except Exception as e:
+        await cl.Message(content=f"❌ Voice input error: {str(e)}").send()
+
+@cl.action_callback("english_voice")
+async def on_english_voice(action: cl.Action):
+    """Handle English voice input"""
+    await handle_voice_input("en-IN")
+
+@cl.action_callback("hindi_voice")
+async def on_hindi_voice(action: cl.Action):
+    """Handle Hindi voice input"""
+    await handle_voice_input("hi-IN")
+
+@cl.action_callback("text_input")
+async def on_text_input(action: cl.Action):
+    """Handle text input selection"""
+    await cl.Message(content="Please type your message in the chat").send()
 
 async def extract_city_from_message(message: str) -> Optional[str]:
     """Extracts standardized city name from current message"""
@@ -677,12 +659,11 @@ async def get_lawyer_recommendations(coords: str, lawyer_type: str) -> str:
 
 @cl.on_message
 async def handle_message(message: cl.Message):
-    
     # Get current chat history
     chat_history: List[Dict[str, Any]] = cl.user_session.get("chat_history", [])
 
     # Check if this is a voice input follow-up
-    is_voice_input = cl.user_session.get("processing_voice_input", False)
+    is_voice_input = message.content.startswith("🎤")  # Simple check for voice input
     detected_lang = cl.user_session.get("detected_lang", "en")
 
     # Keep only last 20 messages to prevent unlimited growth
@@ -722,16 +703,12 @@ async def handle_message(message: cl.Message):
     processing_msg = await cl.Message(content="🔍 Analyzing your query...").send()
     
     try:
-        # Check if we already have a detected language from voice input
-        if is_voice_input:
-            original_text = message.content
-            # We already have the detected language from STT
-            translated_text, _ = await detect_and_translate_to_english(original_text)
-        else:
-            # For text input, detect language and translate
-            original_text = message.content
-            translated_text, detected_lang = await detect_and_translate_to_english(original_text)
-            cl.user_session.set("detected_lang", detected_lang)
+        # Get the original text (remove voice prefix if present)
+        original_text = message.content.replace("🎤 You said: ", "") if is_voice_input else message.content
+        
+        # Translate to English if needed
+        translated_text, detected_lang = await detect_and_translate_to_english(original_text)
+        cl.user_session.set("detected_lang", detected_lang)
         
         legal_plugin = cl.user_session.get("legal_plugin")
         
@@ -873,29 +850,22 @@ async def handle_message(message: cl.Message):
                 # Update the final message in history
                 chat_history[-1]["content"] = final_content
                 response_msg = await cl.Message(content=final_content).send()
-                # If this was a voice input, also speak the response
-                if is_voice_input or cl.user_session.get("prefer_audio", False):
+                
+                # Speak the response if this was a voice input
+                if is_voice_input:
                     try:
                         await synthesize_speech(trans_op, detected_lang)
-                        await response_msg.update(content=f"✅ Advice:\n{trans_op}\n\n🔊 Audio response provided")
                     except Exception as e:
-                        await response_msg.update(content=f"✅ Advice:\n{trans_op}\n\n⚠️ Could not generate audio: {str(e)}")
-                
-                # Clear the voice input flag
-                cl.user_session.set("processing_voice_input", False)
+                        await response_msg.update(content=f"{final_content}\n\n⚠️ Could not generate audio: {str(e)}")
                 
             else:
                 response_msg = await cl.Message(content=f"✅ Advice:\n{trans_op}").send()
-                # If this was a voice input, also speak the response
-                if is_voice_input or cl.user_session.get("prefer_audio", False):
+                # Speak the response if this was a voice input
+                if is_voice_input:
                     try:
                         await synthesize_speech(trans_op, detected_lang)
-                        await response_msg.update(content=f"✅ Advice:\n{trans_op}\n\n🔊 Audio response provided")
                     except Exception as e:
                         await response_msg.update(content=f"✅ Advice:\n{trans_op}\n\n⚠️ Could not generate audio: {str(e)}")
-                
-                # Clear the voice input flag
-                cl.user_session.set("processing_voice_input", False)
                 
             # Update the chat history in session
             cl.user_session.set("chat_history", chat_history)
