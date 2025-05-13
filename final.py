@@ -99,10 +99,17 @@ def get_speech_config():
 
 async def recognize_speech():
     """Recognize speech from microphone with automatic language detection"""
-    auto_detect_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig()
-    speech_config = get_speech_config()
+    # Specify the languages you want to support for auto-detection
+    supported_languages = ["en-US", "hi-IN", "bn-IN", "gu-IN", "kn-IN", "ml-IN", 
+                          "mr-IN", "pa-IN", "ta-IN", "te-IN", "ur-IN"]
     
+    auto_detect_config = speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+        languages=supported_languages
+    )
+    
+    speech_config = get_speech_config()
     audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    
     recognizer = speechsdk.SpeechRecognizer(
         speech_config=speech_config, 
         auto_detect_source_language_config=auto_detect_config,
@@ -115,7 +122,6 @@ async def recognize_speech():
         result = await loop.run_in_executor(None, future.get)
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            # Get detected language
             lang_result = speechsdk.AutoDetectSourceLanguageResult(result)
             detected_language = lang_result.language
             return result.text.strip(), detected_language
