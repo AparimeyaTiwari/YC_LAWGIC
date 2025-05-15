@@ -128,16 +128,19 @@ async def synthesize_speech(text: str, language_code: str = None):
         
         speech_config = get_speech_config()
         speech_config.speech_synthesis_voice_name = voice_name
-        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+        # Use default speaker with async
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
         
-        result = synthesizer.speak_text_async(text).get()
+        # Use async synthesis with proper await
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: synthesizer.speak_text(text))
         
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
             return True
         elif result.reason == speechsdk.ResultReason.Canceled:
             details = result.cancellation_details
             raise RuntimeError(f"TTS canceled: {details.reason} - {details.error_details}")
+        return False
     except Exception as e:
         raise RuntimeError(f"TTS error: {str(e)}")
 
@@ -364,7 +367,11 @@ async def initialize_chat():
     # Initialize Google Maps client
     gmaps = googlemaps.Client(key=os.getenv("GOOGLE_MAPS_API_KEY"))
 
-    # Add voice input options (only English and Hindi)
+    # Send initial message with actions
+    await send_input_options()
+
+async def send_input_options():
+    """Helper function to send input options"""
     actions = [
         cl.Action(
             name="english_voice",
@@ -424,6 +431,25 @@ async def on_hindi_voice(action: cl.Action):
 async def on_text_input(action: cl.Action):
     """Handle text input selection"""
     await cl.Message(content="Please type your message in the chat").send()
+
+@cl.action_callback("tts_command")
+async def on_tts_command(action: cl.Action):
+    """Handle TTS command for a message"""
+    try:
+        # Get the text from the action payload
+        text_to_speak = action.payload["text"]
+        detected_lang = cl.user_session.get("detected_lang", "en")
+        
+        status_msg = await cl.Message(content="🔊 Preparing speech...").send()
+        success = await synthesize_speech(text_to_speak, detected_lang)
+        await status_msg.remove()
+        
+        if not success:
+            await cl.Message(content="⚠️ Could not generate speech for this message").send()
+    except KeyError:
+        await cl.Message(content="❌ Error: No text found to speak").send()
+    except Exception as e:
+        await cl.Message(content=f"❌ TTS Error: {str(e)}").send()
 
 async def extract_city_from_message(message: str) -> Optional[str]:
     """Extracts standardized city name from current message"""
@@ -677,8 +703,11 @@ async def handle_message(message: cl.Message):
         "timestamp": datetime.now().strftime("%H:%M:%S"),
         "input_mode": "voice" if is_voice_input else "text"
     })
+
+    # Send input options after each message
+    await send_input_options()
     
-    # Handle file attachments (keep your existing file handling code)
+    # Handle file attachments
     if message.elements:
         processing_msg = await cl.Message(content="📄 Analyzing document...").send()
         analyses = []
@@ -695,7 +724,19 @@ async def handle_message(message: cl.Message):
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             })
             
-            await cl.Message(content="\n\n".join(analyses)).send()
+            # Create response message with TTS action
+            response_content = "\n\n".join(analyses)
+            actions = [
+                cl.Action(
+                    name="tts_command",
+                    value=response_content,
+                    label="🗣️ Speak Response",
+                    description="Hear the response",
+                    payload={"text": response_content}
+                )
+            ]
+            await cl.Message(content=response_content, actions=actions).send()
+            
             await processing_msg.remove()
             return
     
@@ -837,6 +878,7 @@ async def handle_message(message: cl.Message):
             # Remove the processing message first
             await processing_msg.remove()
             
+            # Create the response message
             if "YES" in needs_lawyer:
                 lawyer_type = await kernel.invoke(
                     legal_plugin["lawyer_type"],
@@ -849,26 +891,50 @@ async def handle_message(message: cl.Message):
                 
                 # Update the final message in history
                 chat_history[-1]["content"] = final_content
-                response_msg = await cl.Message(content=final_content).send()
                 
-                # Speak the response if this was a voice input
+                # Create response message with TTS action
+                actions = [
+                    cl.Action(
+                        name="tts_command",
+                        value=final_content,
+                        label="🗣️ Speak Response",
+                        description="Hear the response",
+                        payload={"text": final_content}
+                    )
+                ]
+                await cl.Message(content=final_content, actions=actions).send()
+                
+                # Speak the response automatically if this was a voice input
                 if is_voice_input:
                     try:
                         await synthesize_speech(trans_op, detected_lang)
                     except Exception as e:
-                        await response_msg.update(content=f"{final_content}\n\n⚠️ Could not generate audio: {str(e)}")
+                        await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
                 
             else:
-                response_msg = await cl.Message(content=f"✅ Advice:\n{trans_op}").send()
-                # Speak the response if this was a voice input
+                actions = [
+                    cl.Action(
+                        name="tts_command",
+                        value=trans_op,
+                        label="🗣️ Speak Response",
+                        description="Hear the response",
+                        payload={"text": trans_op}
+                    )
+                ]
+                await cl.Message(content=f"✅ Advice:\n{trans_op}", actions=actions).send()
+                
+                # Speak the response automatically if this was a voice input
                 if is_voice_input:
                     try:
                         await synthesize_speech(trans_op, detected_lang)
                     except Exception as e:
-                        await response_msg.update(content=f"✅ Advice:\n{trans_op}\n\n⚠️ Could not generate audio: {str(e)}")
-                
+                        await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
+            
             # Update the chat history in session
             cl.user_session.set("chat_history", chat_history)
+            
+            # Remove processing message
+            await processing_msg.remove()
                 
     except Exception as e:
         error_msg = f"❌ Processing error: {str(e)}"
