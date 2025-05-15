@@ -76,13 +76,31 @@ chat_client = AzureOpenAI(
 # Simplified language options - only English and Hindi
 language_options = {
     "english": "en-IN",
-    "hindi": "hi-IN"
+    "hindi": "hi-IN",
+    "marathi": "mr-IN",
+    "bengali": "bn-IN",
+    "gujarati": "gu-IN",
+    "kannada": "kn-IN",
+    "malayalam": "ml-IN",
+    "punjabi": "pa-IN",
+    "tamil": "ta-IN",
+    "telugu": "te-IN",
+    "urdu": "ur-IN"
 }
 
 # Mapping from language code to Azure voice names
 language_to_voice = {
     'en': 'en-IN-NeerjaNeural',
-    'hi': 'hi-IN-SwaraNeural'
+    'hi': 'hi-IN-SwaraNeural',
+    'bn': 'bn-IN-TanishaaNeural',
+    'gu': 'gu-IN-DhwaniNeural',
+    'kn': 'kn-IN-SapnaNeural',
+    'ml': 'ml-IN-SobhanaNeural',
+    'mr': 'mr-IN-AarohiNeural',
+    'pa': 'pa-IN-GaganNeural',
+    'ta': 'ta-IN-PallaviNeural',
+    'te': 'te-IN-MohanNeural',
+    'ur': 'ur-IN-SalmanNeural'
 }
 
 def get_speech_config(language_code="en-IN"):
@@ -198,7 +216,28 @@ gmaps = None
 # initialize translator key and endpoint
 language_map = {
     'hi': 'Hindi',
-    'en': 'English'
+    'en': 'English',
+    'mr': 'Marathi',
+    'gu': 'Gujarati',
+    'kn': 'Kannada',
+    'ta': 'Tamil',
+    'te': 'Telugu',
+    'bn': 'Bengali',
+    'pa': 'Punjabi',
+    'ml': 'Malayalam',
+    'or': 'Odia',
+    'as': 'Assamese',
+    'ur': 'Urdu',
+    'kok': 'Konkani',
+    'mai': 'Maithili',
+    'ks': 'Kashmiri',
+    'ne': 'Nepali',
+    'sd': 'Sindhi',
+    'sa': 'Sanskrit',
+    'bho': 'Bhojpuri',
+    'dog': 'Dogri',
+    'mni': 'Manipuri',
+    'sat': 'Santali',
 }
 
 key = os.getenv("TRANSLATOR_KEY")
@@ -387,14 +426,79 @@ async def send_input_options():
             description="हिंदी में बोलें",
             payload={"type": "voice", "language": "hi-IN"}
         ),
+
         cl.Action(
             name="text_input",
             value="text",
             label="✏️ Text Input",
             description="Type your message",
             payload={"type": "text"}
+        ),
+        cl.Action(
+            name="marathi_voice",
+            value="mr-IN",
+            label="🗣️ Marathi Voice (मराठी)",
+            description="मराठीत बोला",
+            payload={"type": "voice", "language": "mr-IN"}
+        ),
+        cl.Action(
+            name="bengali_voice",
+            value="bn-IN",
+            label="🗣️ Bengali Voice (বাংলা)",
+            description="বাংলায় বলুন",
+            payload={"type": "voice", "language": "bn-IN"}
+        ),
+        cl.Action(
+            name="gujarati_voice",
+            value="gu-IN",
+            label="🗣️ Gujarati Voice (ગુજરાતી)",
+            description="ગુજરાતીમાં બોલો",
+            payload={"type": "voice", "language": "gu-IN"}
+        ),
+        cl.Action(
+            name="kannada_voice",
+            value="kn-IN",
+            label="🗣️ Kannada Voice (ಕನ್ನಡ)",
+            description="ಕನ್ನಡದಲ್ಲಿ ಮಾತಾಡಿ",
+            payload={"type": "voice", "language": "kn-IN"}
+        ),
+        cl.Action(
+            name="malayalam_voice",
+            value="ml-IN",
+            label="🗣️ Malayalam Voice (മലയാളം)",
+            description="മലയാളത്തിൽ സംസാരിക്കുക",
+            payload={"type": "voice", "language": "ml-IN"}
+        ),
+        cl.Action(
+            name="punjabi_voice",
+            value="pa-IN",
+            label="🗣️ Punjabi Voice (ਪੰਜਾਬੀ)",
+            description="ਪੰਜਾਬੀ ਵਿੱਚ ਗੱਲ ਕਰੋ",
+            payload={"type": "voice", "language": "pa-IN"}
+        ),
+        cl.Action(
+            name="tamil_voice",
+            value="ta-IN",
+            label="🗣️ Tamil Voice (தமிழ்)",
+            description="தமிழில் பேசுங்கள்",
+            payload={"type": "voice", "language": "ta-IN"}
+        ),
+        cl.Action(
+            name="telugu_voice",
+            value="te-IN",
+            label="🗣️ Telugu Voice (తెలుగు)",
+            description="తెలుగులో మాట్లాడండి",
+            payload={"type": "voice", "language": "te-IN"}
+        ),
+        cl.Action(
+            name="urdu_voice",
+            value="ur-IN",
+            label="🗣️ Urdu Voice (اردو)",
+            description="اردو میں بات کریں",
+            payload={"type": "voice", "language": "ur-IN"}
         )
     ]
+
     await cl.Message(content="How would you like to provide input?", actions=actions).send()
 
 async def handle_voice_input(language_locale: str):
@@ -426,6 +530,51 @@ async def on_english_voice(action: cl.Action):
 async def on_hindi_voice(action: cl.Action):
     """Handle Hindi voice input"""
     await handle_voice_input("hi-IN")
+
+@cl.action_callback("marathi_voice")
+async def on_marathi_voice(action: cl.Action):
+    """Handle Marathi voice input"""
+    await handle_voice_input("mr-IN")
+
+@cl.action_callback("bengali_voice")
+async def on_bengali_voice(action: cl.Action):
+    """Handle Bengali voice input"""
+    await handle_voice_input("bn-IN")
+
+@cl.action_callback("gujarati_voice")
+async def on_gujarati_voice(action: cl.Action):
+    """Handle Gujarati voice input"""
+    await handle_voice_input("gu-IN")
+
+@cl.action_callback("kannada_voice")
+async def on_kannada_voice(action: cl.Action):
+    """Handle Kannada voice input"""
+    await handle_voice_input("kn-IN")
+
+@cl.action_callback("malayalam_voice")
+async def on_malayalam_voice(action: cl.Action):
+    """Handle Malayalam voice input"""
+    await handle_voice_input("ml-IN")
+
+@cl.action_callback("punjabi_voice")
+async def on_punjabi_voice(action: cl.Action):
+    """Handle Punjabi voice input"""
+    await handle_voice_input("pa-IN")
+
+@cl.action_callback("tamil_voice")
+async def on_tamil_voice(action: cl.Action):
+    """Handle Tamil voice input"""
+    await handle_voice_input("ta-IN")
+
+@cl.action_callback("telugu_voice")
+async def on_telugu_voice(action: cl.Action):
+    """Handle Telugu voice input"""
+    await handle_voice_input("te-IN")
+
+@cl.action_callback("urdu_voice")
+async def on_urdu_voice(action: cl.Action):
+    """Handle Urdu voice input"""
+    await handle_voice_input("ur-IN")
 
 @cl.action_callback("text_input")
 async def on_text_input(action: cl.Action):
