@@ -413,6 +413,13 @@ async def send_input_options():
     """Helper function to send input options"""
     actions = [
         cl.Action(
+            name="text_input",
+            value="text",
+            label="✏️ Text Input",
+            description="Type your message",
+            payload={"type": "text"}
+        ), 
+        cl.Action(
             name="english_voice",
             value="en-IN",
             label="🗣️ English Voice",
@@ -425,14 +432,6 @@ async def send_input_options():
             label="🗣️ Hindi Voice (हिंदी)",
             description="हिंदी में बोलें",
             payload={"type": "voice", "language": "hi-IN"}
-        ),
-
-        cl.Action(
-            name="text_input",
-            value="text",
-            label="✏️ Text Input",
-            description="Type your message",
-            payload={"type": "text"}
         ),
         cl.Action(
             name="marathi_voice",
@@ -585,18 +584,28 @@ async def on_text_input(action: cl.Action):
 async def on_tts_command(action: cl.Action):
     """Handle TTS command for a message"""
     try:
-        # Get the text from the action payload
+        if not action.payload or "text" not in action.payload:
+            raise KeyError("No text found in action payload")
+            
         text_to_speak = action.payload["text"]
+        if not text_to_speak or not isinstance(text_to_speak, str):
+            raise ValueError("Invalid text content for TTS")
+            
         detected_lang = cl.user_session.get("detected_lang", "en")
         
         status_msg = await cl.Message(content="🔊 Preparing speech...").send()
-        success = await synthesize_speech(text_to_speak, detected_lang)
-        await status_msg.remove()
-        
-        if not success:
-            await cl.Message(content="⚠️ Could not generate speech for this message").send()
-    except KeyError:
-        await cl.Message(content="❌ Error: No text found to speak").send()
+        try:
+            success = await synthesize_speech(text_to_speak, detected_lang)
+            await status_msg.remove()
+            
+            if not success:
+                await cl.Message(content="⚠️ Could not generate speech for this message").send()
+        except Exception as e:
+            await status_msg.remove()
+            raise e
+            
+    except KeyError as e:
+        await cl.Message(content=f"❌ Error: {str(e)}").send()
     except Exception as e:
         await cl.Message(content=f"❌ TTS Error: {str(e)}").send()
 
@@ -867,24 +876,24 @@ async def handle_message(message: cl.Message):
         
         if analyses:
             # Add analysis to history
+            response_content = "\n\n".join(analyses)
             chat_history.append({
                 "role": "assistant",
-                "content": "\n\n".join(analyses),
+                "content": response_content,
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             })
             
-            # Create response message with TTS action
-            response_content = "\n\n".join(analyses)
-            actions = [
+            # Create and send response message with TTS action immediately
+            msg = cl.Message(content=response_content)
+            msg.actions = [
                 cl.Action(
                     name="tts_command",
-                    value=response_content,
                     label="🗣️ Speak Response",
                     description="Hear the response",
                     payload={"text": response_content}
                 )
             ]
-            await cl.Message(content=response_content, actions=actions).send()
+            await msg.send()
             
             await processing_msg.remove()
             return
@@ -1041,17 +1050,17 @@ async def handle_message(message: cl.Message):
                 # Update the final message in history
                 chat_history[-1]["content"] = final_content
                 
-                # Create response message with TTS action
-                actions = [
+                # Create and send response message with TTS action immediately
+                msg = cl.Message(content=final_content)
+                msg.actions = [
                     cl.Action(
                         name="tts_command",
-                        value=final_content,
                         label="🗣️ Speak Response",
                         description="Hear the response",
                         payload={"text": final_content}
                     )
                 ]
-                await cl.Message(content=final_content, actions=actions).send()
+                await msg.send()
                 
                 # Speak the response automatically if this was a voice input
                 if is_voice_input:
@@ -1061,16 +1070,17 @@ async def handle_message(message: cl.Message):
                         await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
                 
             else:
-                actions = [
+                # Create and send response message with TTS action immediately
+                msg = cl.Message(content=f"✅ Advice:\n{trans_op}")
+                msg.actions = [
                     cl.Action(
                         name="tts_command",
-                        value=trans_op,
                         label="🗣️ Speak Response",
                         description="Hear the response",
                         payload={"text": trans_op}
                     )
                 ]
-                await cl.Message(content=f"✅ Advice:\n{trans_op}", actions=actions).send()
+                await msg.send()
                 
                 # Speak the response automatically if this was a voice input
                 if is_voice_input:
