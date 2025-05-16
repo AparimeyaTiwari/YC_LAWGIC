@@ -22,9 +22,6 @@ from azure.cognitiveservices.vision.computervision.models import OperationStatus
 from msrest.authentication import CognitiveServicesCredentials
 import asyncio
 import re
-import os
-import chainlit as cl
-from dotenv import load_dotenv
 import requests
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
@@ -407,7 +404,8 @@ async def initialize_chat():
     gmaps = googlemaps.Client(key=os.getenv("GOOGLE_MAPS_API_KEY"))
 
     # Send initial message with actions
-    await send_input_options()
+    actions = await send_input_options()
+    await cl.Message(content="How would you like to provide input?", actions=actions).send()
 
 async def send_input_options():
     """Helper function to send input options"""
@@ -498,7 +496,7 @@ async def send_input_options():
         )
     ]
 
-    await cl.Message(content="How would you like to provide input?", actions=actions).send()
+    return actions
 
 async def handle_voice_input(language_locale: str):
     """Common handler for voice input in any language"""
@@ -783,9 +781,9 @@ async def analyze_document(file: cl.File) -> str:
 
         # Format the response
         action_flag = str(action_required).strip().upper()
-        action_text = ("⚠️ **Action Recommended** - Consult a lawyer immediately" 
+        action_text = ("⚠️ *Action Recommended* - Consult a lawyer immediately" 
                       if "YES" in action_flag 
-                      else "✅ **No Immediate Action Needed**")
+                      else "✅ *No Immediate Action Needed*")
 
         # Create summary
         summary = await kernel.invoke(
@@ -801,7 +799,7 @@ async def analyze_document(file: cl.File) -> str:
             f"{str(analysis).strip()}\n\n"
             f"## ⚖️ Legal Assessment\n"
             f"{action_text}\n\n"
-            f"📌 _Analysis based on {file.name}_"
+            f"📌 Analysis based on {file.name}"
         )
         
         return response
@@ -809,7 +807,7 @@ async def analyze_document(file: cl.File) -> str:
     except Exception as e:
         error_msg = (
             f"❌ Document analysis failed\n\n"
-            f"**Error**: {str(e)}\n\n"
+            f"*Error*: {str(e)}\n\n"
             f"Please try again or upload a different file."
         )
         return error_msg
@@ -833,7 +831,7 @@ async def get_lawyer_recommendations(coords: str, lawyer_type: str) -> str:
             return "No nearby lawyers found for this specialty"
 
         return "\n\n".join(
-            f"🏛 **{lawyer['name']}** (⭐ {lawyer.get('rating', 'N/A')})\n"
+            f"🏛 *{lawyer['name']}* (⭐ {lawyer.get('rating', 'N/A')})\n"
             f"📍 {lawyer['vicinity']}\n"
             f"📞 Contact via Google Maps"
             for lawyer in top_lawyers
@@ -863,7 +861,7 @@ async def handle_message(message: cl.Message):
     })
 
     # Send input options after each message
-    await send_input_options()
+    # await send_input_options()
     
     # Handle file attachments
     if message.elements:
@@ -885,14 +883,16 @@ async def handle_message(message: cl.Message):
             
             # Create and send response message with TTS action immediately
             msg = cl.Message(content=response_content)
-            msg.actions = [
+            actions = await send_input_options()
+            msg.actions = actions
+            msg.actions.append(
                 cl.Action(
                     name="tts_command",
                     label="🗣️ Speak Response",
                     description="Hear the response",
-                    payload={"text": response_content}
+                    payload={"text": final_content}
                 )
-            ]
+            )
             await msg.send()
             
             await processing_msg.remove()
@@ -1052,42 +1052,46 @@ async def handle_message(message: cl.Message):
                 
                 # Create and send response message with TTS action immediately
                 msg = cl.Message(content=final_content)
-                msg.actions = [
+                actions = await send_input_options()
+                msg.actions = actions
+                msg.actions.append(
                     cl.Action(
                         name="tts_command",
                         label="🗣️ Speak Response",
                         description="Hear the response",
                         payload={"text": final_content}
                     )
-                ]
+                )
                 await msg.send()
                 
                 # Speak the response automatically if this was a voice input
-                if is_voice_input:
-                    try:
-                        await synthesize_speech(trans_op, detected_lang)
-                    except Exception as e:
-                        await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
+                # if is_voice_input:
+                #     try:
+                #         await synthesize_speech(trans_op, detected_lang)
+                #     except Exception as e:
+                #         await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
                 
             else:
                 # Create and send response message with TTS action immediately
                 msg = cl.Message(content=f"✅ Advice:\n{trans_op}")
-                msg.actions = [
+                actions = await send_input_options()
+                msg.actions = actions
+                msg.actions.append(
                     cl.Action(
                         name="tts_command",
                         label="🗣️ Speak Response",
                         description="Hear the response",
                         payload={"text": trans_op}
                     )
-                ]
+                )
                 await msg.send()
                 
                 # Speak the response automatically if this was a voice input
-                if is_voice_input:
-                    try:
-                        await synthesize_speech(trans_op, detected_lang)
-                    except Exception as e:
-                        await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
+                # if is_voice_input:
+                #     try:
+                #         await synthesize_speech(trans_op, detected_lang)
+                #     except Exception as e:
+                #         await cl.Message(content=f"⚠️ Could not generate audio: {str(e)}").send()
             
             # Update the chat history in session
             cl.user_session.set("chat_history", chat_history)
