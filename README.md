@@ -225,8 +225,6 @@ chainlit run main.py --port 8000
 ---
 
 ## 📌 What's Next?
-- Voice input using Azure Speech (STT).
-- Voice output for better accessibility.
 - User profiles for history and saved queries.
 - Role-based filters for specific legal domains.
 - Public-facing legal FAQ database with AI curation.
@@ -234,7 +232,7 @@ chainlit run main.py --port 8000
 ---
 
 ## 📽️ Demonstration
-- Youtube Link: https://youtu.be/OgEoEoIMP5s?si=c3NPoDg_4rPB8N5r
+- Youtube Link: 
 
 
 ---
