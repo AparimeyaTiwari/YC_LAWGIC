@@ -232,7 +232,7 @@ chainlit run main.py --port 8000
 ---
 
 ## 📽️ Demonstration
-- Youtube Link: 
+- Youtube Link: https://youtu.be/a1v9YRu0rsA?si=1pmoSq1JXleMS4ay
 
 
 ---
